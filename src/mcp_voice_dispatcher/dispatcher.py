@@ -108,8 +108,13 @@ class VoiceDispatcher:
         record_seconds = seconds or self._settings.microphone_seconds
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as handle:
             audio_path = Path(handle.name)
-        self._recorder.record(audio_path, seconds=record_seconds)
-        return self.dispatch_file(audio_path)
+        try:
+            self._recorder.record(audio_path, seconds=record_seconds)
+            report = self.dispatch_file(audio_path)
+        finally:
+            audio_path.unlink(missing_ok=True)
+        report.audio_path = Path("<microphone-recording>")
+        return report
 
     def list_tools(self) -> list[dict[str, Any]]:
         with self._mcp_pool.session() as mcp_client:

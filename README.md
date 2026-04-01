@@ -39,6 +39,7 @@ Copy `.env.example` to `.env` and fill in:
 - `GMAIL_ACCESS_TOKEN`
 - `GMAIL_FROM_EMAIL`
 - optional tuning such as `MCP_POOL_SIZE` for the number of long-lived MCP stdio sessions
+- upload guardrails such as `MAX_UPLOAD_BYTES` and `MAX_AUDIO_SECONDS`
 
 ### 3. Run the dashboard
 
@@ -50,6 +51,7 @@ Open `http://127.0.0.1:8000` to:
 
 - record audio directly from the browser
 - upload an audio file for transcription and routing
+- normalize supported uploads to mono WAV before transcription
 - test typed commands before you speak them
 - review confidence against an execution threshold
 - edit the generated Gmail or Notion payload before approval
@@ -100,3 +102,4 @@ python -m mcp_voice_dispatcher tools
 - The Node server keeps REST integrations isolated behind MCP tools so the Python app never needs backend-specific HTTP logic.
 - The current microphone workflow records a fixed-duration clip for simplicity.
 - The dashboard uses FastAPI plus a lightweight browser client so users can interact with the prototype without touching the terminal.
+- Uploaded audio is validated for type, size, and duration, then normalized with `ffmpeg` before transcription.

@@ -26,6 +26,8 @@ class Settings:
     approval_confidence_threshold: float
     approval_ttl_seconds: int
     mcp_pool_size: int
+    max_upload_bytes: int
+    max_audio_seconds: int
     workspace_root: Path
 
     @classmethod
@@ -50,5 +52,7 @@ class Settings:
             ),
             approval_ttl_seconds=int(os.getenv("APPROVAL_TTL_SECONDS", "900")),
             mcp_pool_size=int(os.getenv("MCP_POOL_SIZE", "2")),
+            max_upload_bytes=int(os.getenv("MAX_UPLOAD_BYTES", "26214400")),
+            max_audio_seconds=int(os.getenv("MAX_AUDIO_SECONDS", "120")),
             workspace_root=workspace_root,
         )

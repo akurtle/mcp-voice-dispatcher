@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import time
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
@@ -11,6 +10,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from .audio_ingest import AudioValidationError, PreparedAudioFile, prepare_uploaded_audio
 from .config import Settings
 from .dispatcher import VoiceDispatcher
 from .models import RoutedIntent
@@ -69,14 +69,6 @@ class ApprovalStore:
 def _web_dir() -> Path:
     return Path(__file__).resolve().parent / "web"
 
-
-def _normalize_suffix(filename: str | None) -> str:
-    if not filename:
-        return ".webm"
-    suffix = Path(filename).suffix
-    return suffix if suffix else ".webm"
-
-
 def create_app() -> FastAPI:
     settings = Settings.from_env(require_openai=False)
     dispatcher = VoiceDispatcher(settings)
@@ -129,17 +121,19 @@ def create_app() -> FastAPI:
     async def dispatch_audio(
         audio: UploadFile = File(...),
     ) -> dict[str, object]:
-        suffix = _normalize_suffix(audio.filename)
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
-            temp_path = Path(handle.name)
-            handle.write(await audio.read())
+        prepared_audio: PreparedAudioFile | None = None
         try:
-            result = dispatcher.dispatch_file(temp_path)
+            prepared_audio = await prepare_uploaded_audio(audio, settings)
+            result = dispatcher.dispatch_file(prepared_audio.path)
             return preview_response(result.as_dict(), result.routing.intent)
+        except AudioValidationError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
         except Exception as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         finally:
-            temp_path.unlink(missing_ok=True)
+            if prepared_audio is not None:
+                prepared_audio.cleanup()
+            await audio.close()
 
     @app.post("/api/dispatch/confirm")
     async def confirm_dispatch(request: ApprovalRequest) -> dict[str, object]:
