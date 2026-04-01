@@ -8,6 +8,7 @@ from typing import Any
 from .audio import MicrophoneRecorder
 from .config import Settings
 from .mcp_client import StdioMCPClient, extract_text_content, tool_to_dict
+from .models import RoutedIntent
 from .router import IntentRouter, RoutingDecision
 from .transcriber import OpenAITranscriber
 
@@ -31,6 +32,12 @@ class DispatchReport:
             "tool_result": self.tool_result,
             "tool_result_text": self.tool_result_text,
         }
+
+
+@dataclass(slots=True)
+class ToolExecutionResult:
+    tool_result: dict[str, Any]
+    tool_result_text: str | None
 
 
 class VoiceDispatcher:
@@ -61,13 +68,12 @@ class VoiceDispatcher:
             self._router = IntentRouter(self._settings)
         return self._router
 
-    def dispatch_file(self, audio_path: Path, dry_run: bool = False) -> DispatchReport:
+    def dispatch_file(self, audio_path: Path) -> DispatchReport:
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio file does not exist: {audio_path}")
         transcript = self._transcriber_client.transcribe(audio_path)
         return self.dispatch_transcript(
             transcript=transcript,
-            dry_run=dry_run,
             audio_path=audio_path,
             source="audio",
         )
@@ -75,7 +81,6 @@ class VoiceDispatcher:
     def dispatch_transcript(
         self,
         transcript: str,
-        dry_run: bool = False,
         audio_path: Path | None = None,
         source: str = "text",
     ) -> DispatchReport:
@@ -88,29 +93,21 @@ class VoiceDispatcher:
         ) as mcp_client:
             tools = [tool_to_dict(tool) for tool in mcp_client.list_tools()]
             routing = self._router_client.route(normalized_transcript, tools)
-            tool_result = None
-            tool_result_text = None
-            if routing.intent.tool_name and not dry_run:
-                tool_result = mcp_client.call_tool(
-                    routing.intent.tool_name,
-                    routing.intent.tool_arguments(),
-                )
-                tool_result_text = extract_text_content(tool_result)
         return DispatchReport(
             source=source,
             audio_path=audio_path or Path("<text-input>"),
             transcript=normalized_transcript,
             routing=routing,
-            tool_result=tool_result,
-            tool_result_text=tool_result_text,
+            tool_result=None,
+            tool_result_text=None,
         )
 
-    def dispatch_microphone(self, seconds: int | None = None, dry_run: bool = False) -> DispatchReport:
+    def dispatch_microphone(self, seconds: int | None = None) -> DispatchReport:
         record_seconds = seconds or self._settings.microphone_seconds
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as handle:
             audio_path = Path(handle.name)
         self._recorder.record(audio_path, seconds=record_seconds)
-        return self.dispatch_file(audio_path, dry_run=dry_run)
+        return self.dispatch_file(audio_path)
 
     def list_tools(self) -> list[dict[str, Any]]:
         with StdioMCPClient(
@@ -118,3 +115,19 @@ class VoiceDispatcher:
             cwd=self._settings.workspace_root,
         ) as mcp_client:
             return [tool_to_dict(tool) for tool in mcp_client.list_tools()]
+
+    def execute_intent(self, intent: RoutedIntent) -> ToolExecutionResult:
+        if not intent.tool_name:
+            raise ValueError("Only actionable MCP routes can be executed.")
+        with StdioMCPClient(
+            command=self._settings.mcp_server_command,
+            cwd=self._settings.workspace_root,
+        ) as mcp_client:
+            tool_result = mcp_client.call_tool(
+                intent.tool_name,
+                intent.tool_arguments(),
+            )
+        return ToolExecutionResult(
+            tool_result=tool_result,
+            tool_result_text=extract_text_content(tool_result),
+        )

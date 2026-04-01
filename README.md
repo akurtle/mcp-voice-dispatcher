@@ -50,8 +50,9 @@ Open `http://127.0.0.1:8000` to:
 - record audio directly from the browser
 - upload an audio file for transcription and routing
 - test typed commands before you speak them
-- preview intent routing in dry-run mode
-- execute the selected MCP tool call
+- review confidence against an execution threshold
+- edit the generated Gmail or Notion payload before approval
+- explicitly approve the MCP tool call before any side effect occurs
 
 ### 4. Run the CLI
 
@@ -90,6 +91,7 @@ python -m mcp_voice_dispatcher tools
 - Edge-case disambiguation still depends on a clarification branch rather than multi-turn recovery.
 - Auth is env-token based and should move to hardened OAuth flows or secret storage.
 - MCP rate limiting and queueing are not implemented yet.
+- Approval state is currently an in-memory store, so pending reviews do not survive process restarts.
 
 ## Notes
 

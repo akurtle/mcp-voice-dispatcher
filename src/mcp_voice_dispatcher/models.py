@@ -50,6 +50,22 @@ class RoutedIntent(BaseModel):
             return self.route.value
         return None
 
+    def editable_payload(self) -> dict[str, Any]:
+        if self.route == DispatchRoute.GMAIL_SEND_EMAIL and self.gmail is not None:
+            return self.gmail.model_dump(mode="json")
+        if self.route == DispatchRoute.NOTION_CREATE_PAGE and self.notion is not None:
+            return self.notion.model_dump(mode="json", exclude_none=True)
+        return {}
+
+    def with_payload_edits(self, payload: dict[str, Any]) -> "RoutedIntent":
+        if self.route == DispatchRoute.GMAIL_SEND_EMAIL:
+            updated = GmailDraft.model_validate(payload)
+            return self.model_copy(update={"gmail": updated})
+        if self.route == DispatchRoute.NOTION_CREATE_PAGE:
+            updated = NotionPageDraft.model_validate(payload)
+            return self.model_copy(update={"notion": updated})
+        return self
+
     def tool_arguments(self) -> dict[str, Any]:
         if self.route == DispatchRoute.GMAIL_SEND_EMAIL and self.gmail is not None:
             return {

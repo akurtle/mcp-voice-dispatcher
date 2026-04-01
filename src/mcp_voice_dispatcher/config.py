@@ -23,6 +23,8 @@ class Settings:
     microphone_sample_rate: int
     microphone_channels: int
     microphone_seconds: int
+    approval_confidence_threshold: float
+    approval_ttl_seconds: int
     workspace_root: Path
 
     @classmethod
@@ -42,5 +44,9 @@ class Settings:
             microphone_sample_rate=int(os.getenv("MICROPHONE_SAMPLE_RATE", "16000")),
             microphone_channels=int(os.getenv("MICROPHONE_CHANNELS", "1")),
             microphone_seconds=int(os.getenv("MICROPHONE_SECONDS", "6")),
+            approval_confidence_threshold=float(
+                os.getenv("APPROVAL_CONFIDENCE_THRESHOLD", "0.8")
+            ),
+            approval_ttl_seconds=int(os.getenv("APPROVAL_TTL_SECONDS", "900")),
             workspace_root=workspace_root,
         )

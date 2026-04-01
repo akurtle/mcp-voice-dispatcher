@@ -35,7 +35,26 @@ class RoutedIntentTests(unittest.TestCase):
             },
         )
 
+    def test_payload_edits_are_validated(self) -> None:
+        intent = RoutedIntent(
+            route=DispatchRoute.NOTION_CREATE_PAGE,
+            confidence=0.9,
+            summary="create a notion page",
+            notion={
+                "title": "Retro",
+                "content_markdown": "- wins",
+            },
+        )
+        updated = intent.with_payload_edits(
+            {
+                "title": "Retro Updated",
+                "content_markdown": "- wins\n- blockers",
+                "database_id": "db_123",
+            }
+        )
+        self.assertEqual(updated.editable_payload()["title"], "Retro Updated")
+        self.assertEqual(updated.tool_arguments()["databaseId"], "db_123")
+
 
 if __name__ == "__main__":
     unittest.main()
-

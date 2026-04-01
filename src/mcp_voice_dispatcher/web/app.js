@@ -12,15 +12,32 @@ const recordToggle = document.getElementById("recordToggle");
 const recordState = document.getElementById("recordState");
 const audioFileInput = document.getElementById("audioFile");
 const commandText = document.getElementById("commandText");
-const dryRun = document.getElementById("dryRun");
+const approvalState = document.getElementById("approvalState");
+const approvalHint = document.getElementById("approvalHint");
+const approvalPayload = document.getElementById("approvalPayload");
+const approveAction = document.getElementById("approveAction");
 
 let mediaRecorder = null;
 let audioChunks = [];
 let recordedBlob = null;
+let pendingApproval = null;
 
 function setStatus(text, isError = false) {
   requestStatus.textContent = text;
   requestStatus.style.color = isError ? "#9f2f21" : "";
+}
+
+function setApprovalState(text, isError = false) {
+  approvalState.textContent = text;
+  approvalState.style.color = isError ? "#9f2f21" : "";
+}
+
+function clearApproval() {
+  pendingApproval = null;
+  approvalPayload.value = "";
+  approvalHint.textContent =
+    "Preview a command to review the generated payload before any side effect is allowed.";
+  setApprovalState("No pending approval");
 }
 
 function renderResult(report) {
@@ -32,6 +49,28 @@ function renderResult(report) {
   intentJson.textContent = JSON.stringify(report.intent ?? {}, null, 2);
   toolJson.textContent = JSON.stringify(report.tool_result ?? {}, null, 2);
   toolResponseText.textContent = report.tool_result_text || "No tool executed yet.";
+
+  const approval = report.approval;
+  if (!approval?.required) {
+    clearApproval();
+    return;
+  }
+
+  pendingApproval = approval;
+  approvalPayload.value = JSON.stringify(approval.editable_payload ?? {}, null, 2);
+  if (approval.confirmed) {
+    approvalHint.textContent = "The reviewed payload was approved and executed.";
+    setApprovalState("Confirmed");
+    return;
+  }
+
+  if (approval.confidence_ok) {
+    approvalHint.textContent = `Confidence ${Number(report.intent?.confidence ?? 0).toFixed(2)} meets the execution threshold ${Number(approval.confidence_threshold ?? 0).toFixed(2)}. Review and approve when ready.`;
+    setApprovalState("Awaiting approval");
+  } else {
+    approvalHint.textContent = `Confidence ${Number(report.intent?.confidence ?? 0).toFixed(2)} is below the execution threshold ${Number(approval.confidence_threshold ?? 0).toFixed(2)}. Rephrase the command before executing.`;
+    setApprovalState("Blocked by threshold", true);
+  }
 }
 
 function renderTools(tools) {
@@ -76,7 +115,7 @@ async function postJson(url, payload) {
   return body;
 }
 
-async function postAudio(dryRunValue) {
+async function postAudio() {
   const file = audioFileInput.files[0];
   const blob = file || recordedBlob;
   if (!blob) {
@@ -85,7 +124,6 @@ async function postAudio(dryRunValue) {
   const formData = new FormData();
   const filename = file?.name || "browser-recording.webm";
   formData.append("audio", blob, filename);
-  formData.append("dry_run", String(dryRunValue));
   const response = await fetch("/api/dispatch/audio", {
     method: "POST",
     body: formData,
@@ -99,7 +137,7 @@ async function postAudio(dryRunValue) {
 
 async function handleRequest(action) {
   try {
-    setStatus("Dispatching...");
+    setStatus("Preparing review...");
     setButtonsDisabled(true);
     const report = await action();
     renderResult(report);
@@ -155,6 +193,7 @@ document.getElementById("refreshTools").addEventListener("click", () => {
       source: "dashboard",
       tool_result: null,
       tool_result_text: null,
+      approval: null,
     };
   });
 });
@@ -163,26 +202,26 @@ document.getElementById("previewText").addEventListener("click", () => {
   handleRequest(() =>
     postJson("/api/dispatch/text", {
       command: commandText.value,
-      dry_run: true,
-    }),
-  );
-});
-
-document.getElementById("executeText").addEventListener("click", () => {
-  handleRequest(() =>
-    postJson("/api/dispatch/text", {
-      command: commandText.value,
-      dry_run: dryRun.checked ? true : false,
     }),
   );
 });
 
 document.getElementById("previewAudio").addEventListener("click", () => {
-  handleRequest(() => postAudio(true));
+  handleRequest(() => postAudio());
 });
 
-document.getElementById("executeAudio").addEventListener("click", () => {
-  handleRequest(() => postAudio(dryRun.checked ? true : false));
+approveAction.addEventListener("click", () => {
+  handleRequest(async () => {
+    if (!pendingApproval?.required || !pendingApproval.confirmation_id) {
+      throw new Error("Preview an actionable command before approving.");
+    }
+    const payload = JSON.parse(approvalPayload.value || "{}");
+    return postJson("/api/dispatch/confirm", {
+      confirmation_id: pendingApproval.confirmation_id,
+      confirm: true,
+      payload,
+    });
+  });
 });
 
 recordToggle.addEventListener("click", async () => {
@@ -201,6 +240,7 @@ audioFileInput.addEventListener("change", () => {
   }
 });
 
+clearApproval();
 loadTools()
   .then(() => setStatus("Ready"))
   .catch((error) => setStatus(error.message, true));

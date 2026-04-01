@@ -22,10 +22,7 @@
         <div class="panel panel-input">
           <div class="panel-head">
             <h2>Command Studio</h2>
-            <label class="toggle">
-              <input id="dryRun" type="checkbox" checked />
-              <span>Preview only</span>
-            </label>
+            <p class="status-pill">Review required before execution</p>
           </div>
 
           <div class="composer">
@@ -36,8 +33,7 @@
               placeholder="Email Sarah and Jamal that the deployment moved to Friday at 2 PM."
             ></textarea>
             <div class="actions">
-              <button id="previewText" class="btn btn-secondary">Preview Intent</button>
-              <button id="executeText" class="btn btn-primary">Run Command</button>
+              <button id="previewText" class="btn btn-primary">Prepare Review</button>
             </div>
           </div>
 
@@ -52,8 +48,7 @@
             </div>
             <input id="audioFile" type="file" accept="audio/*" />
             <div class="actions">
-              <button id="previewAudio" class="btn btn-secondary">Preview Audio Intent</button>
-              <button id="executeAudio" class="btn btn-primary">Run Audio Command</button>
+              <button id="previewAudio" class="btn btn-primary">Prepare Audio Review</button>
             </div>
           </div>
 
@@ -102,6 +97,21 @@
           <div class="result-card">
             <h3>Intent Payload</h3>
             <pre id="intentJson">{}</pre>
+          </div>
+
+          <div class="result-card">
+            <div class="panel-head compact">
+              <h3>Approval Gate</h3>
+              <p id="approvalState" class="status-pill">No pending approval</p>
+            </div>
+            <p id="approvalHint" class="transcript">
+              Preview a command to review the generated payload before any side effect is allowed.
+            </p>
+            <label for="approvalPayload">Editable payload JSON</label>
+            <textarea id="approvalPayload" rows="10" placeholder="{ }"></textarea>
+            <div class="actions">
+              <button id="approveAction" class="btn btn-accent">Approve and Execute</button>
+            </div>
           </div>
 
           <div class="result-card">
