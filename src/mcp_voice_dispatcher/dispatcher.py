@@ -7,7 +7,7 @@ from typing import Any
 
 from .audio import MicrophoneRecorder
 from .config import Settings
-from .mcp_client import StdioMCPClient, extract_text_content, tool_to_dict
+from .mcp_client import MCPClientPool, extract_text_content, tool_to_dict
 from .models import RoutedIntent
 from .router import IntentRouter, RoutingDecision
 from .transcriber import OpenAITranscriber
@@ -49,6 +49,11 @@ class VoiceDispatcher:
         )
         self._transcriber: OpenAITranscriber | None = None
         self._router: IntentRouter | None = None
+        self._mcp_pool = MCPClientPool(
+            command=settings.mcp_server_command,
+            cwd=settings.workspace_root,
+            max_size=settings.mcp_pool_size,
+        )
 
     def _require_openai(self) -> None:
         if not self._settings.openai_api_key:
@@ -87,10 +92,7 @@ class VoiceDispatcher:
         normalized_transcript = transcript.strip()
         if not normalized_transcript:
             raise ValueError("Transcript must not be empty.")
-        with StdioMCPClient(
-            command=self._settings.mcp_server_command,
-            cwd=self._settings.workspace_root,
-        ) as mcp_client:
+        with self._mcp_pool.session() as mcp_client:
             tools = [tool_to_dict(tool) for tool in mcp_client.list_tools()]
             routing = self._router_client.route(normalized_transcript, tools)
         return DispatchReport(
@@ -110,19 +112,13 @@ class VoiceDispatcher:
         return self.dispatch_file(audio_path)
 
     def list_tools(self) -> list[dict[str, Any]]:
-        with StdioMCPClient(
-            command=self._settings.mcp_server_command,
-            cwd=self._settings.workspace_root,
-        ) as mcp_client:
+        with self._mcp_pool.session() as mcp_client:
             return [tool_to_dict(tool) for tool in mcp_client.list_tools()]
 
     def execute_intent(self, intent: RoutedIntent) -> ToolExecutionResult:
         if not intent.tool_name:
             raise ValueError("Only actionable MCP routes can be executed.")
-        with StdioMCPClient(
-            command=self._settings.mcp_server_command,
-            cwd=self._settings.workspace_root,
-        ) as mcp_client:
+        with self._mcp_pool.session() as mcp_client:
             tool_result = mcp_client.call_tool(
                 intent.tool_name,
                 intent.tool_arguments(),
@@ -131,3 +127,6 @@ class VoiceDispatcher:
             tool_result=tool_result,
             tool_result_text=extract_text_content(tool_result),
         )
+
+    def close(self) -> None:
+        self._mcp_pool.close()

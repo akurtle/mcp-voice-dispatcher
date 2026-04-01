@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import contextlib
 import queue
 import subprocess
 import threading
@@ -168,6 +169,102 @@ class StdioMCPClient:
         assert self._process.stderr is not None
         for line in self._process.stderr:
             self._stderr_lines.append(line.rstrip())
+
+
+class MCPClientPool:
+    def __init__(
+        self,
+        command: Sequence[str],
+        cwd: Path,
+        max_size: int = 2,
+        timeout_seconds: float = 15.0,
+        client_factory: Any | None = None,
+    ) -> None:
+        if max_size < 1:
+            raise ValueError("max_size must be at least 1.")
+        self._command = list(command)
+        self._cwd = cwd
+        self._max_size = max_size
+        self._timeout_seconds = timeout_seconds
+        self._client_factory = client_factory
+        self._available: queue.LifoQueue[StdioMCPClient] = queue.LifoQueue(maxsize=max_size)
+        self._created = 0
+        self._closed = False
+        self._lock = threading.Lock()
+
+    def _build_client(self) -> StdioMCPClient:
+        factory = self._client_factory or StdioMCPClient
+        client = factory(
+            command=self._command,
+            cwd=self._cwd,
+            timeout_seconds=self._timeout_seconds,
+        )
+        client.start()
+        return client
+
+    @contextlib.contextmanager
+    def session(self) -> Any:
+        client = self._acquire()
+        discard = False
+        try:
+            yield client
+        except Exception:
+            discard = True
+            raise
+        finally:
+            if discard:
+                self._discard(client)
+            else:
+                self._release(client)
+
+    def _acquire(self) -> StdioMCPClient:
+        while True:
+            try:
+                return self._available.get_nowait()
+            except queue.Empty:
+                with self._lock:
+                    if self._closed:
+                        raise MCPProtocolError("MCP client pool is closed.")
+                    if self._created < self._max_size:
+                        self._created += 1
+                        try:
+                            return self._build_client()
+                        except Exception:
+                            self._created -= 1
+                            raise
+            try:
+                return self._available.get(timeout=self._timeout_seconds)
+            except queue.Empty as error:
+                raise MCPProtocolError("Timed out waiting for an available MCP session.") from error
+
+    def _release(self, client: StdioMCPClient) -> None:
+        with self._lock:
+            if self._closed:
+                client.close()
+                if self._created > 0:
+                    self._created -= 1
+                return
+        self._available.put(client)
+
+    def _discard(self, client: StdioMCPClient) -> None:
+        client.close()
+        with self._lock:
+            if self._created > 0:
+                self._created -= 1
+
+    def close(self) -> None:
+        drained: list[StdioMCPClient] = []
+        with self._lock:
+            self._closed = True
+        while True:
+            try:
+                drained.append(self._available.get_nowait())
+            except queue.Empty:
+                break
+        for client in drained:
+            client.close()
+        with self._lock:
+            self._created = max(0, self._created - len(drained))
 
 
 def tool_to_dict(tool: MCPTool) -> dict[str, Any]:

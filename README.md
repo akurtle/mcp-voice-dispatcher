@@ -38,6 +38,7 @@ Copy `.env.example` to `.env` and fill in:
 - `NOTION_DATABASE_ID`
 - `GMAIL_ACCESS_TOKEN`
 - `GMAIL_FROM_EMAIL`
+- optional tuning such as `MCP_POOL_SIZE` for the number of long-lived MCP stdio sessions
 
 ### 3. Run the dashboard
 

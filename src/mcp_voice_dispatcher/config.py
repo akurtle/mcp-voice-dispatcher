@@ -25,6 +25,7 @@ class Settings:
     microphone_seconds: int
     approval_confidence_threshold: float
     approval_ttl_seconds: int
+    mcp_pool_size: int
     workspace_root: Path
 
     @classmethod
@@ -48,5 +49,6 @@ class Settings:
                 os.getenv("APPROVAL_CONFIDENCE_THRESHOLD", "0.8")
             ),
             approval_ttl_seconds=int(os.getenv("APPROVAL_TTL_SECONDS", "900")),
+            mcp_pool_size=int(os.getenv("MCP_POOL_SIZE", "2")),
             workspace_root=workspace_root,
         )

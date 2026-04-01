@@ -83,6 +83,7 @@ def create_app() -> FastAPI:
     web_dir = _web_dir()
     approvals = ApprovalStore(settings.approval_ttl_seconds)
     app = FastAPI(title="MCP Voice Dispatcher Dashboard", version="0.1.0")
+    app.add_event_handler("shutdown", dispatcher.close)
 
     def preview_response(report: dict[str, object], intent: RoutedIntent) -> dict[str, object]:
         approval: dict[str, object] | None = None
