@@ -9,10 +9,13 @@ description = "Voice-driven automation with OpenAI transcription, structured int
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+  "fastapi>=0.115.0",
   "openai>=1.75.0",
   "pydantic>=2.8.0",
   "python-dotenv>=1.0.1",
+  "python-multipart>=0.0.9",
   "sounddevice>=0.4.7",
+  "uvicorn>=0.30.0",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +29,8 @@ mcp-voice = "mcp_voice_dispatcher.cli:main"
 [tool.setuptools]
 package-dir = {"" = "src"}
 
+[tool.setuptools.package-data]
+"mcp_voice_dispatcher" = ["web/*"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
-

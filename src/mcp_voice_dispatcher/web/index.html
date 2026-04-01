@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MCP Voice Dispatcher</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="backdrop backdrop-a"></div>
+    <div class="backdrop backdrop-b"></div>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Voice-to-MCP Control Room</p>
+        <h1>MCP Voice Dispatcher Dashboard</h1>
+        <p class="lede">
+          Capture browser audio, test typed commands, inspect the routed intent, and decide whether to execute the MCP tool call.
+        </p>
+      </section>
+
+      <section class="grid">
+        <div class="panel panel-input">
+          <div class="panel-head">
+            <h2>Command Studio</h2>
+            <label class="toggle">
+              <input id="dryRun" type="checkbox" checked />
+              <span>Preview only</span>
+            </label>
+          </div>
+
+          <div class="composer">
+            <label for="commandText">Typed command</label>
+            <textarea
+              id="commandText"
+              rows="5"
+              placeholder="Email Sarah and Jamal that the deployment moved to Friday at 2 PM."
+            ></textarea>
+            <div class="actions">
+              <button id="previewText" class="btn btn-secondary">Preview Intent</button>
+              <button id="executeText" class="btn btn-primary">Run Command</button>
+            </div>
+          </div>
+
+          <div class="composer">
+            <label>Voice command</label>
+            <div class="record-box">
+              <div>
+                <p id="recordState" class="status-pill">Recorder idle</p>
+                <p class="hint">Use your microphone or upload an audio clip.</p>
+              </div>
+              <button id="recordToggle" class="btn btn-accent">Start Recording</button>
+            </div>
+            <input id="audioFile" type="file" accept="audio/*" />
+            <div class="actions">
+              <button id="previewAudio" class="btn btn-secondary">Preview Audio Intent</button>
+              <button id="executeAudio" class="btn btn-primary">Run Audio Command</button>
+            </div>
+          </div>
+
+          <div class="composer">
+            <div class="panel-head compact">
+              <h2>Available Tools</h2>
+              <button id="refreshTools" class="btn btn-ghost">Refresh</button>
+            </div>
+            <div id="toolList" class="tool-list"></div>
+          </div>
+        </div>
+
+        <div class="panel panel-output">
+          <div class="panel-head">
+            <h2>Dispatch Result</h2>
+            <p id="requestStatus" class="status-pill">Waiting for input</p>
+          </div>
+
+          <div class="result-card">
+            <h3>Summary</h3>
+            <div id="summaryGrid" class="summary-grid empty">
+              <div>
+                <span class="meta-label">Route</span>
+                <strong id="routeValue">None</strong>
+              </div>
+              <div>
+                <span class="meta-label">Confidence</span>
+                <strong id="confidenceValue">0.00</strong>
+              </div>
+              <div>
+                <span class="meta-label">Prompt</span>
+                <strong id="templateValue">N/A</strong>
+              </div>
+              <div>
+                <span class="meta-label">Source</span>
+                <strong id="sourceValue">N/A</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="result-card">
+            <h3>Transcript</h3>
+            <p id="transcriptValue" class="transcript">No transcript yet.</p>
+          </div>
+
+          <div class="result-card">
+            <h3>Intent Payload</h3>
+            <pre id="intentJson">{}</pre>
+          </div>
+
+          <div class="result-card">
+            <h3>Tool Response</h3>
+            <p id="toolResponseText" class="transcript">No tool executed yet.</p>
+            <pre id="toolJson">{}</pre>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -7,6 +7,7 @@ from pathlib import Path
 from .config import Settings
 from .dispatcher import VoiceDispatcher
 from .mcp_client import StdioMCPClient, tool_to_dict
+from .web import run_dashboard
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -22,6 +23,9 @@ def build_parser() -> argparse.ArgumentParser:
     file_parser.add_argument("--dry-run", action="store_true")
 
     subparsers.add_parser("tools", help="List tools exposed by the MCP server")
+    serve_parser = subparsers.add_parser("serve", help="Run the web dashboard")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8000)
     return parser
 
 
@@ -37,6 +41,9 @@ def main() -> None:
         ) as client:
             tools = [tool_to_dict(tool) for tool in client.list_tools()]
         print(json.dumps(tools, indent=2))
+        return
+    if args.command == "serve":
+        run_dashboard(host=args.host, port=args.port)
         return
 
     dispatcher = VoiceDispatcher(settings)

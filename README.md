@@ -39,7 +39,21 @@ Copy `.env.example` to `.env` and fill in:
 - `GMAIL_ACCESS_TOKEN`
 - `GMAIL_FROM_EMAIL`
 
-### 3. Run the dispatcher
+### 3. Run the dashboard
+
+```bash
+python -m mcp_voice_dispatcher serve --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000` to:
+
+- record audio directly from the browser
+- upload an audio file for transcription and routing
+- test typed commands before you speak them
+- preview intent routing in dry-run mode
+- execute the selected MCP tool call
+
+### 4. Run the CLI
 
 Record from the microphone:
 
@@ -82,4 +96,4 @@ python -m mcp_voice_dispatcher tools
 - The Python router uses OpenAI structured outputs with a Pydantic schema for typed intent objects.
 - The Node server keeps REST integrations isolated behind MCP tools so the Python app never needs backend-specific HTTP logic.
 - The current microphone workflow records a fixed-duration clip for simplicity.
-
+- The dashboard uses FastAPI plus a lightweight browser client so users can interact with the prototype without touching the terminal.
