@@ -26,8 +26,9 @@ class DispatcherCleanupTests(unittest.TestCase):
 
         dispatcher._recorder.record.side_effect = record
 
-        def dispatch_file(path: Path) -> DispatchReport:
+        def dispatch_file(path: Path, request_id=None) -> DispatchReport:
             return DispatchReport(
+                request_id=request_id,
                 source="audio",
                 audio_path=path,
                 transcript="hello",

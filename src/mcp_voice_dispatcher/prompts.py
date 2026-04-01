@@ -47,14 +47,16 @@ class PromptTemplateLibrary:
         template_instruction = {
             "email": (
                 "Bias toward gmail_send_email only when the user clearly wants a message sent. "
-                "Infer concise but professional subject lines when the user does not say one."
+                "Infer concise but professional subject lines when the user does not say one. "
+                "If recipients are named without clear email resolution, ask to clarify rather than guessing."
             ),
             "notion": (
                 "Bias toward notion_create_page when the user is trying to capture notes, plans, or summaries. "
-                "Preserve bullet structure in content_markdown whenever it is implied."
+                "Preserve bullet structure in content_markdown whenever it is implied. "
+                "If a database target is ambiguous, ask to clarify rather than inventing one."
             ),
             "general": (
-                "Choose the single best route. Use clarify only when the transcript is ambiguous enough that acting would be risky."
+                "Choose the single best route. Use clarify when recipients, dates, times, or targets are ambiguous enough that acting would be risky."
             ),
         }[template_name]
         system_prompt = (
@@ -62,6 +64,8 @@ class PromptTemplateLibrary:
             "Return only the structured schema supplied by the client.\n"
             "Map transcripts into exactly one route.\n"
             "Keep confidence conservative for noisy or underspecified requests.\n"
+            "Do not guess exact dates from relative words such as tomorrow or next Friday.\n"
+            "Do not guess recipient email addresses or Notion database identifiers.\n"
             f"{template_instruction}\n\n"
             "Available MCP tools:\n"
             f"{tool_block}"

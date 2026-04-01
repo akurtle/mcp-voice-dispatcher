@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "mcp-server": "node src/mcp_server/index.js",
-    "check": "node --check src/mcp_server/index.js"
+    "check": "node --check src/mcp_server/index.js",
+    "test:mcp-server": "node src/mcp_server/lib.test.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "latest",

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,9 @@ class Settings:
     mcp_pool_size: int
     max_upload_bytes: int
     max_audio_seconds: int
+    routing_confidence_threshold: float
+    contact_aliases: dict[str, str]
+    notion_database_aliases: dict[str, str]
     workspace_root: Path
 
     @classmethod
@@ -54,5 +58,19 @@ class Settings:
             mcp_pool_size=int(os.getenv("MCP_POOL_SIZE", "2")),
             max_upload_bytes=int(os.getenv("MAX_UPLOAD_BYTES", "26214400")),
             max_audio_seconds=int(os.getenv("MAX_AUDIO_SECONDS", "120")),
+            routing_confidence_threshold=float(
+                os.getenv("ROUTING_CONFIDENCE_THRESHOLD", "0.7")
+            ),
+            contact_aliases=_parse_json_object(os.getenv("CONTACT_ALIASES_JSON", "{}")),
+            notion_database_aliases=_parse_json_object(
+                os.getenv("NOTION_DATABASE_ALIASES_JSON", "{}")
+            ),
             workspace_root=workspace_root,
         )
+
+
+def _parse_json_object(raw_value: str) -> dict[str, str]:
+    parsed = json.loads(raw_value)
+    if not isinstance(parsed, dict):
+        raise RuntimeError("Expected a JSON object for alias configuration.")
+    return {str(key).casefold(): str(value) for key, value in parsed.items()}

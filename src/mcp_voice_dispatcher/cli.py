@@ -6,6 +6,7 @@ from pathlib import Path
 
 from .config import Settings
 from .dispatcher import VoiceDispatcher
+from .observability import new_request_id
 from .web import run_dashboard
 
 
@@ -35,8 +36,9 @@ def main() -> None:
 
     if args.command == "tools":
         dispatcher = VoiceDispatcher(settings)
+        request_id = new_request_id()
         try:
-            tools = dispatcher.list_tools()
+            tools = dispatcher.list_tools(request_id=request_id)
         finally:
             dispatcher.close()
         print(json.dumps(tools, indent=2))
@@ -46,14 +48,17 @@ def main() -> None:
         return
 
     dispatcher = VoiceDispatcher(settings)
+    request_id = new_request_id()
     try:
         if args.command == "listen":
             report = dispatcher.dispatch_microphone(
                 seconds=args.seconds,
+                request_id=request_id,
             )
         else:
             report = dispatcher.dispatch_file(
                 audio_path=args.audio,
+                request_id=request_id,
             )
         print(json.dumps(report.as_dict(), indent=2))
         intent = report.routing.intent
@@ -81,7 +86,7 @@ def main() -> None:
         if approved not in {"y", "yes"}:
             print(json.dumps({"execution_cancelled": True}, indent=2))
             return
-        execution = dispatcher.execute_intent(intent)
+        execution = dispatcher.execute_intent(intent, request_id=request_id)
         final_report = report.as_dict()
         final_report["intent"] = intent.model_dump(mode="json", exclude_none=True)
         final_report["tool_result"] = execution.tool_result

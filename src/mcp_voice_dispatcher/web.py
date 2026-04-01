@@ -3,17 +3,19 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from time import perf_counter
 from uuid import uuid4
 
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from .audio_ingest import AudioValidationError, PreparedAudioFile, prepare_uploaded_audio
 from .config import Settings
 from .dispatcher import VoiceDispatcher
 from .models import RoutedIntent
+from .observability import get_logger, log_event, new_request_id
 
 
 class TextDispatchRequest(BaseModel):
@@ -69,13 +71,47 @@ class ApprovalStore:
 def _web_dir() -> Path:
     return Path(__file__).resolve().parent / "web"
 
-def create_app() -> FastAPI:
-    settings = Settings.from_env(require_openai=False)
-    dispatcher = VoiceDispatcher(settings)
+def create_app(
+    settings: Settings | None = None,
+    dispatcher: VoiceDispatcher | None = None,
+) -> FastAPI:
+    settings = settings or Settings.from_env(require_openai=False)
+    dispatcher = dispatcher or VoiceDispatcher(settings)
     web_dir = _web_dir()
     approvals = ApprovalStore(settings.approval_ttl_seconds)
     app = FastAPI(title="MCP Voice Dispatcher Dashboard", version="0.1.0")
     app.add_event_handler("shutdown", dispatcher.close)
+    logger = get_logger(__name__)
+
+    @app.middleware("http")
+    async def attach_request_id(request: Request, call_next) -> Response:
+        request_id = request.headers.get("x-request-id", new_request_id())
+        request.state.request_id = request_id
+        started_at = perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as error:
+            log_event(
+                logger,
+                "http_request_failed",
+                request_id=request_id,
+                method=request.method,
+                path=request.url.path,
+                failure_type=type(error).__name__,
+                latency_ms=round((perf_counter() - started_at) * 1000, 2),
+            )
+            raise
+        response.headers["x-request-id"] = request_id
+        log_event(
+            logger,
+            "http_request_completed",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            latency_ms=round((perf_counter() - started_at) * 1000, 2),
+        )
+        return response
 
     def preview_response(report: dict[str, object], intent: RoutedIntent) -> dict[str, object]:
         approval: dict[str, object] | None = None
@@ -106,25 +142,32 @@ def create_app() -> FastAPI:
         return FileResponse(web_dir / "app.js", media_type="application/javascript")
 
     @app.get("/api/tools")
-    async def list_tools() -> list[dict[str, object]]:
-        return dispatcher.list_tools()
+    async def list_tools(request: Request) -> list[dict[str, object]]:
+        return dispatcher.list_tools(request_id=request.state.request_id)
 
     @app.post("/api/dispatch/text")
-    async def dispatch_text(request: TextDispatchRequest) -> dict[str, object]:
+    async def dispatch_text(request: Request, payload: TextDispatchRequest) -> dict[str, object]:
         try:
-            result = dispatcher.dispatch_transcript(request.command)
+            result = dispatcher.dispatch_transcript(
+                payload.command,
+                request_id=request.state.request_id,
+            )
         except Exception as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         return preview_response(result.as_dict(), result.routing.intent)
 
     @app.post("/api/dispatch/audio")
     async def dispatch_audio(
+        request: Request,
         audio: UploadFile = File(...),
     ) -> dict[str, object]:
         prepared_audio: PreparedAudioFile | None = None
         try:
             prepared_audio = await prepare_uploaded_audio(audio, settings)
-            result = dispatcher.dispatch_file(prepared_audio.path)
+            result = dispatcher.dispatch_file(
+                prepared_audio.path,
+                request_id=request.state.request_id,
+            )
             return preview_response(result.as_dict(), result.routing.intent)
         except AudioValidationError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
@@ -136,7 +179,7 @@ def create_app() -> FastAPI:
             await audio.close()
 
     @app.post("/api/dispatch/confirm")
-    async def confirm_dispatch(request: ApprovalRequest) -> dict[str, object]:
+    async def confirm_dispatch(http_request: Request, request: ApprovalRequest) -> dict[str, object]:
         if not request.confirm:
             raise HTTPException(status_code=400, detail="Explicit confirmation is required.")
         try:
@@ -154,7 +197,10 @@ def create_app() -> FastAPI:
             )
         try:
             approved_intent = intent.with_payload_edits(request.payload or intent.editable_payload())
-            execution = dispatcher.execute_intent(approved_intent)
+            execution = dispatcher.execute_intent(
+                approved_intent,
+                request_id=http_request.state.request_id,
+            )
         except Exception as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
         response = dict(pending.report)

@@ -40,6 +40,7 @@ Copy `.env.example` to `.env` and fill in:
 - `GMAIL_FROM_EMAIL`
 - optional tuning such as `MCP_POOL_SIZE` for the number of long-lived MCP stdio sessions
 - upload guardrails such as `MAX_UPLOAD_BYTES` and `MAX_AUDIO_SECONDS`
+- routing guardrails such as `ROUTING_CONFIDENCE_THRESHOLD`, `CONTACT_ALIASES_JSON`, and `NOTION_DATABASE_ALIASES_JSON`
 
 ### 3. Run the dashboard
 
@@ -56,6 +57,7 @@ Open `http://127.0.0.1:8000` to:
 - review confidence against an execution threshold
 - edit the generated Gmail or Notion payload before approval
 - explicitly approve the MCP tool call before any side effect occurs
+- trace requests end to end with request IDs and structured logs
 
 ### 4. Run the CLI
 
@@ -103,3 +105,4 @@ python -m mcp_voice_dispatcher tools
 - The current microphone workflow records a fixed-duration clip for simplicity.
 - The dashboard uses FastAPI plus a lightweight browser client so users can interact with the prototype without touching the terminal.
 - Uploaded audio is validated for type, size, and duration, then normalized with `ffmpeg` before transcription.
+- Structured logs capture request IDs, transcript length, selected route, confidence, MCP session events, tool latency, and backend API status codes.

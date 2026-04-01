@@ -1,6 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import {
+  buildNotionCreatePageBody,
+  buildRawEmail,
+  fetchJsonWithRetry,
+  logServerEvent,
+} from "./lib.js";
 
 const server = new McpServer({
   name: "mcp-voice-dispatcher-tools",
@@ -15,35 +21,6 @@ function requireEnv(name) {
   return value;
 }
 
-function chunkText(text, limit = 1800) {
-  const chunks = [];
-  const normalized = text.replace(/\r\n/g, "\n").trim();
-  if (!normalized) {
-    return [];
-  }
-  for (let offset = 0; offset < normalized.length; offset += limit) {
-    chunks.push(normalized.slice(offset, offset + limit));
-  }
-  return chunks;
-}
-
-function notionParagraph(text) {
-  return {
-    object: "block",
-    type: "paragraph",
-    paragraph: {
-      rich_text: [
-        {
-          type: "text",
-          text: {
-            content: text,
-          },
-        },
-      ],
-    },
-  };
-}
-
 async function createNotionPage({ title, contentMarkdown, databaseId }) {
   const notionToken = requireEnv("NOTION_API_TOKEN");
   const resolvedDatabaseId = databaseId || process.env.NOTION_DATABASE_ID;
@@ -51,53 +28,32 @@ async function createNotionPage({ title, contentMarkdown, databaseId }) {
     throw new Error("NOTION_DATABASE_ID is required when databaseId is not provided.");
   }
   const titleProperty = process.env.NOTION_TITLE_PROPERTY || "Name";
-  const body = {
-    parent: { database_id: resolvedDatabaseId },
-    properties: {
-      [titleProperty]: {
-        title: [
-          {
-            type: "text",
-            text: {
-              content: title,
-            },
-          },
-        ],
-      },
-    },
-    children: chunkText(contentMarkdown).map(notionParagraph),
-  };
-  const response = await fetch("https://api.notion.com/v1/pages", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${notionToken}`,
-      "Notion-Version": "2022-06-28",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
+  const body = buildNotionCreatePageBody({
+    title,
+    contentMarkdown,
+    databaseId: resolvedDatabaseId,
+    titleProperty,
   });
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(`Notion API ${response.status}: ${JSON.stringify(payload)}`);
-  }
+  const payload = await fetchJsonWithRetry(
+    "https://api.notion.com/v1/pages",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${notionToken}`,
+        "Notion-Version": "2022-06-28",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+    {
+      backend: "notion",
+      action: "create_page",
+    },
+  );
   return {
     id: payload.id,
     url: payload.url ?? null,
   };
-}
-
-function buildRawEmail({ from, to, cc, subject, bodyText }) {
-  const headers = [
-    `From: ${from}`,
-    `To: ${to.join(", ")}`,
-    cc.length ? `Cc: ${cc.join(", ")}` : null,
-    "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
-    `Subject: ${subject}`,
-    "",
-    bodyText,
-  ].filter(Boolean);
-  return Buffer.from(headers.join("\r\n"), "utf8").toString("base64url");
 }
 
 async function sendGmailMessage({ to, cc, subject, bodyText }) {
@@ -105,7 +61,7 @@ async function sendGmailMessage({ to, cc, subject, bodyText }) {
   const from = requireEnv("GMAIL_FROM_EMAIL");
   const userId = process.env.GMAIL_USER_ID || "me";
   const raw = buildRawEmail({ from, to, cc, subject, bodyText });
-  const response = await fetch(
+  const payload = await fetchJsonWithRetry(
     `https://gmail.googleapis.com/gmail/v1/users/${encodeURIComponent(userId)}/messages/send`,
     {
       method: "POST",
@@ -115,11 +71,11 @@ async function sendGmailMessage({ to, cc, subject, bodyText }) {
       },
       body: JSON.stringify({ raw }),
     },
+    {
+      backend: "gmail",
+      action: "send_message",
+    },
   );
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(`Gmail API ${response.status}: ${JSON.stringify(payload)}`);
-  }
   return {
     id: payload.id,
     threadId: payload.threadId,
@@ -204,6 +160,7 @@ server.registerTool(
 
 async function main() {
   const transport = new StdioServerTransport();
+  logServerEvent("mcp_server_ready", { name: "mcp-voice-dispatcher-tools" });
   await server.connect(transport);
 }
 

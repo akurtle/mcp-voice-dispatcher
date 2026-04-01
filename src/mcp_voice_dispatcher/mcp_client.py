@@ -5,10 +5,14 @@ import contextlib
 import queue
 import subprocess
 import threading
+import uuid
+from time import perf_counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from .observability import get_logger, log_event
 
 
 @dataclass(slots=True)
@@ -38,6 +42,8 @@ class StdioMCPClient:
         self._next_id = 1
         self._stderr_lines: list[str] = []
         self._threads: list[threading.Thread] = []
+        self._session_id = uuid.uuid4().hex
+        self._logger = get_logger(__name__)
 
     def __enter__(self) -> "StdioMCPClient":
         self.start()
@@ -49,6 +55,7 @@ class StdioMCPClient:
     def start(self) -> None:
         if self._process is not None:
             return
+        started_at = perf_counter()
         self._process = subprocess.Popen(
             self._command,
             cwd=self._cwd,
@@ -65,6 +72,13 @@ class StdioMCPClient:
         for thread in self._threads:
             thread.start()
         self._initialize()
+        log_event(
+            self._logger,
+            "mcp_session_started",
+            session_id=self._session_id,
+            command=self._command,
+            latency_ms=round((perf_counter() - started_at) * 1000, 2),
+        )
 
     def close(self) -> None:
         if self._process is None:
@@ -77,6 +91,16 @@ class StdioMCPClient:
         except subprocess.TimeoutExpired:
             self._process.kill()
             self._process.wait(timeout=3)
+        log_event(
+            self._logger,
+            "mcp_session_closed",
+            session_id=self._session_id,
+            exit_code=self._process.returncode,
+        )
+        if self._process.stdout:
+            self._process.stdout.close()
+        if self._process.stderr:
+            self._process.stderr.close()
         self._process = None
 
     def list_tools(self) -> list[MCPTool]:
@@ -114,6 +138,7 @@ class StdioMCPClient:
     def _request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         request_id = self._next_id
         self._next_id += 1
+        started_at = perf_counter()
         self._send(
             {
                 "jsonrpc": "2.0",
@@ -123,6 +148,15 @@ class StdioMCPClient:
             }
         )
         message = self._wait_for_response(request_id)
+        log_event(
+            self._logger,
+            "mcp_request_completed",
+            session_id=self._session_id,
+            method=method,
+            mcp_request_id=request_id,
+            latency_ms=round((perf_counter() - started_at) * 1000, 2),
+            has_error="error" in message,
+        )
         if "error" in message:
             raise MCPProtocolError(str(message["error"]))
         return message.get("result", {})
@@ -168,7 +202,24 @@ class StdioMCPClient:
         assert self._process is not None
         assert self._process.stderr is not None
         for line in self._process.stderr:
-            self._stderr_lines.append(line.rstrip())
+            entry = line.rstrip()
+            self._stderr_lines.append(entry)
+            try:
+                parsed = json.loads(entry)
+            except json.JSONDecodeError:
+                log_event(
+                    self._logger,
+                    "mcp_server_stderr",
+                    session_id=self._session_id,
+                    message=entry,
+                )
+                continue
+            log_event(
+                self._logger,
+                "mcp_server_trace",
+                session_id=self._session_id,
+                trace=parsed,
+            )
 
 
 class MCPClientPool:
