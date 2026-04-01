@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-voice-dispatcher"
+version = "0.1.0"
+description = "Voice-driven automation with OpenAI transcription, structured intent routing, and MCP tool dispatch."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "openai>=1.75.0",
+  "pydantic>=2.8.0",
+  "python-dotenv>=1.0.1",
+  "sounddevice>=0.4.7",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[project.scripts]
+mcp-voice = "mcp_voice_dispatcher.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

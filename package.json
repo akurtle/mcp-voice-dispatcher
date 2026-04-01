@@ -1,0 +1,14 @@
+{
+  "name": "mcp-voice-dispatcher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "mcp-server": "node src/mcp_server/index.js",
+    "check": "node --check src/mcp_server/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "zod": "^3.25.0"
+  }
+}
